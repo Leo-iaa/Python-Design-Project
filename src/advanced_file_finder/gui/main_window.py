@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from advanced_file_finder.core.exporter import export_results
 from advanced_file_finder.core.models import MatchMode, SearchOptions
 from advanced_file_finder.gui.search_worker import SearchWorker
 
@@ -40,11 +41,14 @@ class MainWindow(QMainWindow):
         top = QHBoxLayout()
         self.query = QLineEdit()
         self.query.setPlaceholderText("搜索关键词")
+        self.extensions = QLineEdit()
+        self.extensions.setPlaceholderText("扩展名，如 pdf,docx")
         self.mode = QComboBox()
         self.mode.addItems([x.value for x in MatchMode])
         self.path = QLineEdit(str(Path.cwd()))
         choose = QPushButton("选择目录")
         self.search_button = QPushButton("搜索")
+        export_button = QPushButton("导出结果")
         self.stop = QPushButton("停止搜索")
         self.stop.setEnabled(False)
         for w in (
@@ -78,6 +82,7 @@ class MainWindow(QMainWindow):
         choose.clicked.connect(self.choose)
         self.search_button.clicked.connect(self.start)
         self.stop.clicked.connect(self.cancel_search)
+        export_button.clicked.connect(self.export)
         self.table.cellDoubleClicked.connect(self.open_result)
 
     def choose(self) -> None:
@@ -129,6 +134,20 @@ class MainWindow(QMainWindow):
         self.status.setText(
             f"{state}：扫描 {stats.files_scanned} 文件，找到 {stats.matches}，{stats.elapsed_time:.2f} 秒"
         )
+
+    def export(self) -> None:
+        if not self.results:
+            QMessageBox.information(self, "导出", "没有可导出的结果。")
+            return
+        path, selected = QFileDialog.getSaveFileName(
+            self, "导出结果", "results.csv", "CSV (*.csv);;JSON (*.json);;Text (*.txt)"
+        )
+        if path:
+            suffix = Path(path).suffix.lstrip(".") or "csv"
+            try:
+                export_results(self.results, Path(path), suffix)
+            except (OSError, ValueError) as error:
+                QMessageBox.critical(self, "导出失败", str(error))
 
     def cancel_search(self) -> None:
         self.cancel.set()
