@@ -6,8 +6,10 @@ readme = "README.md"
 authors = [{ name = "wt-x", email = "2773050934@qq.com" }]
 requires-python = ">=3.12"
 dependencies = [
+    "pillow>=12.3.0",
     "pyside6>=6.11.2",
     "rapidfuzz>=3.14.6",
+    "rapidocr-onnxruntime>=1.4.4",
 ]
 
 [project.scripts]
