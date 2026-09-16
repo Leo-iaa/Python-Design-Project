@@ -111,10 +111,10 @@ class MainWindow(QMainWindow):
         self.before_date.setCalendarPopup(True)
         self.hidden_files = QCheckBox("包含隐藏文件")
         self.hidden_dirs = QCheckBox("包含隐藏目录")
-'        self.excluded = QLineEdit(
+        self.excluded = QLineEdit(
             ".git, .venv, .local, node_modules, __pycache__, "
             ".pytest_cache, .mypy_cache, .ruff_cache, build, dist"
-        )'
+        )
         grid.addWidget(QLabel("扩展名"), 0, 0)
         grid.addWidget(self.extensions, 0, 1)
         grid.addWidget(QLabel("最小大小"), 0, 2)

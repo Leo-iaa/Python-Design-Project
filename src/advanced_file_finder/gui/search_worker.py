@@ -60,12 +60,12 @@ class OcrIndexWorker(QObject):
     finished = Signal(int, int, int, int, bool)
     failed = Signal(str)
 
-'    def __init__(
+    def __init__(
         self,
         roots: tuple[Path, ...],
         cancel: threading.Event,
         excluded_directories: tuple[str, ...] = (),
-    ) -> None:'
+    ) -> None:
         super().__init__()
         self.roots = roots
         self.cancel = cancel
