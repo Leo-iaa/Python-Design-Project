@@ -27,7 +27,7 @@ def index_images(
     for current, path in enumerate(files, 1):
         if cancel and cancel.is_set():
             break
-        if cache.get(path):
+        if cache.is_current(path):
             success += 1
             if progress:
                 progress(current, len(files), success, failed)

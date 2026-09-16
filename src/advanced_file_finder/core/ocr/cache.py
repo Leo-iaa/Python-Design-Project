@@ -42,6 +42,18 @@ class OcrCache:
             return None
         return OcrResult(row[2], row[3], row[4])
 
+    def is_current(self, path: Path) -> bool:
+        """Return true when any recorded status still matches current metadata."""
+        try:
+            stat = path.stat()
+        except OSError:
+            return False
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT file_size, modified_ns FROM ocr_files WHERE path=?", (str(path),)
+            ).fetchone()
+        return bool(row and row[0] == stat.st_size and row[1] == stat.st_mtime_ns)
+
     def upsert(
         self, path: Path, result: OcrResult, status: str = "indexed", error: str = ""
     ) -> None:
@@ -99,6 +111,17 @@ class OcrCache:
                 )
             )
         return results
+
+    def prune_missing(self) -> int:
+        """Remove cache rows whose images no longer exist."""
+        with self._connect() as db:
+            rows = db.execute("SELECT path FROM ocr_files").fetchall()
+            removed = 0
+            for (value,) in rows:
+                if not Path(value).exists():
+                    db.execute("DELETE FROM ocr_files WHERE path=?", (value,))
+                    removed += 1
+        return removed
 
     def clear(self) -> None:
         with self._connect() as db:
