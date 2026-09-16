@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -34,6 +35,7 @@ from advanced_file_finder.core.drives import available_drives
 from advanced_file_finder.core.exporter import export_results
 from advanced_file_finder.core.filters import normalize_extensions
 from advanced_file_finder.core.models import MatchMode, SearchOptions, SearchResult, SearchStats
+from advanced_file_finder.core.saved_search import SMART_RANGES, SavedSearch, SavedSearchRepository
 from advanced_file_finder.gui.search_worker import SearchWorker
 from advanced_file_finder.utils.settings import add_history
 
@@ -46,6 +48,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Advanced File Finder")
         self.resize(1180, 720)
         self.cancel = threading.Event()
+        self.saved_repository = SavedSearchRepository()
         self.results: list[SearchResult] = []
         self._build_ui()
 
@@ -59,6 +62,12 @@ class MainWindow(QMainWindow):
         self.mode.addItems([item.value for item in MatchMode])
         self.scope = QComboBox()
         self.scope.addItems(["当前目录", "自定义路径", "所有可用磁盘"])
+        self.saved_combo = QComboBox()
+        self.saved_combo.addItem("已保存搜索")
+        self.saved_combo.addItems([item.name for item in self.saved_repository.load()])
+        self.smart_combo = QComboBox()
+        self.smart_combo.addItem("智能搜索")
+        self.smart_combo.addItems(SMART_RANGES)
         self.paths = QLineEdit(str(Path.cwd()))
         browse = QPushButton("添加目录")
         self.search_button = QPushButton("搜索")
@@ -258,6 +267,50 @@ class MainWindow(QMainWindow):
         self.search_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         QMessageBox.critical(self, "搜索失败", message)
+
+    def save_current(self) -> None:
+        try:
+            options = self._options()
+        except ValueError as error:
+            QMessageBox.warning(self, "保存失败", str(error))
+            return
+        name, accepted = QInputDialog.getText(self, "保存搜索", "名称：")
+        if accepted and name.strip():
+            self.saved_repository.create(SavedSearch.from_options(name.strip(), options))
+            self.saved_combo.addItem(name.strip())
+
+    def load_saved(self, index: int) -> None:
+        if index <= 0:
+            return
+        values = self.saved_repository.load()
+        if index > len(values):
+            return
+        saved = values[index - 1]
+        self.query.setText(saved.query)
+        self.mode.setCurrentText(saved.match_mode)
+        self.paths.setText("; ".join(saved.search_paths))
+        self.extensions.setText(",".join(saved.extensions))
+        self.minimum.setText(str(saved.min_size or ""))
+        self.maximum.setText(str(saved.max_size or ""))
+        self.start()
+        self.saved_combo.setCurrentIndex(0)
+
+    def load_smart(self, index: int) -> None:
+        if index <= 0:
+            return
+        label = self.smart_combo.itemText(index)
+        kind, value = SMART_RANGES[label]
+        now = datetime.now()
+        after = (
+            now - __import__("datetime").timedelta(hours=value)
+            if kind == "relative_hours"
+            else now - __import__("datetime").timedelta(days=value)
+        )
+        self.after_enabled.setChecked(True)
+        self.after_date.setDate(QDate(after.year, after.month, after.day))
+        self.query.setText("")
+        self.start()
+        self.smart_combo.setCurrentIndex(0)
 
     def cancel_search(self) -> None:
         self.cancel.set()
