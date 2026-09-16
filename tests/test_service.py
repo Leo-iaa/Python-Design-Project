@@ -1,5 +1,6 @@
 import threading
 from pathlib import Path
+
 from advanced_file_finder.core.models import SearchOptions
 from advanced_file_finder.core.search_service import search
 

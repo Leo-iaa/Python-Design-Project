@@ -3,7 +3,6 @@
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
 from pathlib import Path
 
 from advanced_file_finder.core.models import SearchOptions, SearchResult, SearchStats
