@@ -44,11 +44,21 @@ def prepare_image_for_ocr(image_path: Path, max_long_edge: int | None = 2560) ->
 class RapidOcrEngine(OcrEngine):
     """Lazy RapidOCR wrapper with conservative in-memory preprocessing."""
 
-    def __init__(self, max_long_edge: int | None = 2560) -> None:
+    def __init__(
+        self,
+        max_long_edge: int | None = 2560,
+        intra_op_num_threads: int | None = 8,
+        inter_op_num_threads: int | None = 1,
+    ) -> None:
         from rapidocr_onnxruntime import RapidOCR
 
         self.max_long_edge = max_long_edge
-        self._engine = RapidOCR()
+        kwargs = {}
+        if intra_op_num_threads is not None:
+            kwargs["intra_op_num_threads"] = intra_op_num_threads
+        if inter_op_num_threads is not None:
+            kwargs["inter_op_num_threads"] = inter_op_num_threads
+        self._engine = RapidOCR(**kwargs)
 
     def recognize(self, image_path: Path) -> OcrResult:
         output, _ = self._engine(prepare_image_for_ocr(image_path, self.max_long_edge))
