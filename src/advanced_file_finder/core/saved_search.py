@@ -7,11 +7,17 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from advanced_file_finder.core.models import MatchMode, SearchOptions
-from advanced_file_finder.utils.settings import history_path
+from advanced_file_finder.utils.paths import (
+    SAVED_SEARCH_PATH,
+    ensure_local_dirs,
+    migrate_legacy_json,
+)
 
 
 def saved_path() -> Path:
-    return history_path().with_name("saved_searches.json")
+    ensure_local_dirs()
+    migrate_legacy_json()
+    return SAVED_SEARCH_PATH
 
 
 @dataclass(slots=True)

@@ -25,7 +25,7 @@ def test_legacy_database_backup_does_not_overwrite(tmp_path: Path, monkeypatch) 
     monkeypatch.setattr(paths, "OCR_DATABASE_PATH", target)
     monkeypatch.setattr(paths, "legacy_ocr_database_path", lambda: legacy)
     paths.migrate_legacy_ocr()
-    assert target.exists() and legacy.exists()
+    assert target.exists() and not legacy.exists()
     target.write_bytes(b"keep")
     paths.migrate_legacy_ocr()
     assert target.read_bytes() == b"keep"

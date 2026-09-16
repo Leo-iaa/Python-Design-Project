@@ -1,15 +1,21 @@
 """Runtime-only search history persisted in the user data directory."""
 
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 
+from advanced_file_finder.utils.paths import (
+    SEARCH_HISTORY_PATH,
+    ensure_local_dirs,
+    migrate_legacy_json,
+)
+
 
 def history_path() -> Path:
-    root = Path(os.getenv("APPDATA", Path.home())) / "AdvancedFileFinder"
-    root.mkdir(parents=True, exist_ok=True)
-    return root / "history.json"
+    """Return the project-local search-history path."""
+    ensure_local_dirs()
+    migrate_legacy_json()
+    return SEARCH_HISTORY_PATH
 
 
 def add_history(query: str, mode: str, paths: tuple[Path, ...]) -> None:
