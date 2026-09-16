@@ -20,7 +20,8 @@ target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]`nextend-ignore = ["E501"]
+select = ["E", "F", "I", "UP", "B"]
+extend-ignore = ["E501"]
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
