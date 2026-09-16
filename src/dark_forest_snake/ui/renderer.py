@@ -354,26 +354,36 @@ class Renderer:
             )
 
     # ================================================================ 视野边缘光点
-    def _draw_edge_beacon(self, view: dict) -> None:
-        """可见范围最外圈上、指向目标方向的那一个点发光。
+    def _beacon_cell(self, view: dict) -> tuple[int, int] | None:
+        """可见范围最外圈上、指向目标方向的那一格；没有指示时返回 None。
 
-        颜色 = 目标本身的颜色（疾跑青/护盾紫/灯笼蓝/金苹果金），
-        亮度随接近目标而增强。渲染层只用到八方向 (sx, sy)、接近度与目标种类，
-        永远接触不到目标坐标。
+        贴墙时把光点收进棋盘内（光点只是方向提示，不做寻路）。
+        渲染层只用到八方向 (sx, sy)，永远接触不到目标坐标。
         """
         head = view.get("own_head")
         d = view.get("target_indicator")
         if not head or not d:
-            return
+            return None
         sx, sy = int(d[0]), int(d[1])
         if sx == 0 and sy == 0:
-            return
+            return None
 
         radius = max(1, int(view.get("view_radius", 1)))
         hx, hy = int(head[0]), int(head[1])
-        # 光点落在视野方形的最外圈上；贴墙时收进棋盘内
         bx = min(max(hx + sx * radius, 0), self.width - 1)
         by = min(max(hy + sy * radius, 0), self.height - 1)
+        return bx, by
+
+    def _draw_edge_beacon(self, view: dict) -> None:
+        """可见范围最外圈上、指向目标方向的那一个点发光。
+
+        颜色 = 目标本身的颜色（疾跑青/护盾紫/灯笼蓝/金苹果金），
+        亮度随接近目标而增强。
+        """
+        cell = self._beacon_cell(view)
+        if cell is None:
+            return
+        bx, by = cell
 
         kind = str(view.get("target_kind") or "")
         color = GOLD_COLOR if kind == "gold" else FRUIT_COLORS.get(kind, INDICATOR_COLOR_NORMAL)

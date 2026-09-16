@@ -287,8 +287,8 @@ def test_indicator_may_point_at_wall_ring() -> None:
     assert cell == Cell(0, 0), "允许指示格落在墙环上"
 
 
-def test_indicator_can_be_off_map_and_renderer_skips() -> None:
-    """蛇头在边界、目标在地图外方向：core 层给出越界格，渲染层安全跳过。"""
+def test_indicator_can_be_off_map_and_renderer_clamps() -> None:
+    """蛇头在边界、目标在地图外方向：core 层给出越界格，渲染层把它收进棋盘内。"""
     head = Cell(0, 0)
     target = Cell(-5, -3)  # 内部真相不会这样，但函数必须稳健
     cell = indicator_cell(head, target)
@@ -310,9 +310,23 @@ def test_indicator_can_be_off_map_and_renderer_skips() -> None:
         "reveal_active": False,
         "view_radius": 1,
     }
-    # 不抛 IndexError/KeyError 即通过
+    # 不抛 IndexError/KeyError 即通过，且光点必须被收进棋盘内
     r.draw(view)
-    assert r._indicator_cell(view) is None
+    beacon = r._beacon_cell(view)
+    assert beacon is not None
+    assert 0 <= beacon[0] < 24 and 0 <= beacon[1] < 18
+
+
+def test_renderer_skips_beacon_without_indicator() -> None:
+    """没有八方向指示时渲染层安全跳过（不画光点、不报错）。"""
+    pygame = pytest.importorskip("pygame")
+    from dark_forest_snake.ui.renderer import Renderer
+
+    pygame.init()
+    r = Renderer(pygame.Surface((800, 600)), 24, 18, cell_size=24, origin=(0, 0))
+    assert r._beacon_cell({"own_head": [0, 0], "target_indicator": None}) is None
+    assert r._beacon_cell({"own_head": [0, 0], "target_indicator": [0, 0]}) is None
+    assert r._beacon_cell({}) is None
 
 
 # ================================================================ 五、渲染行为

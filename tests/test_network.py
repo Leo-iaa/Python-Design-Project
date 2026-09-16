@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 
 import pytest
 
@@ -202,7 +203,11 @@ def test_view_state_after_golden_phase_still_hidden() -> None:
         assert "gold" not in view
         gkey = f"{gold_cell.x},{gold_cell.y}"
         if gkey not in view["visible_brightness"]:
-            assert gkey not in json.dumps(view)
+            # 精确匹配：坐标键两侧必须以非数字为界。
+            # 裸子串扫描会误报——"16,10" 里就含有 "6,10"。
+            blob = json.dumps(view)
+            pattern = rf'(?<![\d-]){re.escape(gkey)}(?![\d])'
+            assert not re.search(pattern, blob), f"金苹果坐标 {gkey} 泄漏到 view 中"
 
 
 def test_server_view_for_matches_engine_view() -> None:

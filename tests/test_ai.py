@@ -56,6 +56,12 @@ def test_perception_contract_is_whitelisted() -> None:
         "last_head",
         "danger_cells",
         "indicator",
+        # 与玩家视野同源的补充线索：只有「方向 / 接近度 / 种类」，
+        # 以及进入视野后才可见的果子，均不含隐藏目标坐标。
+        "goal_proximity",
+        "goal_kind",
+        "seen_fruit",
+        "seen_gold",
     }
     assert ALLOWED_PERCEPTION_FIELDS == expected
 

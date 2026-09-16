@@ -93,11 +93,22 @@ def test_ambient_light_depends_only_on_own_head() -> None:
 
 
 # ================================================================ PlayerView 信息隔离
-def _advance(g: Game, seconds: float, step: float = 1 / 60) -> None:
-    t = 0.0
-    while t < seconds:
-        g.update(step)
-        t += step
+def _advance_alive(g: Game, steps: int, loop: list[Direction]) -> None:
+    """按 loop 循环驾驶两只蛇前进 steps 步，让对局在观测期间保持存活。
+
+    不做任何输入时蛇会笔直撞墙、对局提前结束，断言就变成空转。
+    只在方向变化时下指令，避免指令队列堆积。
+    """
+    prev: Direction | None = None
+    for i in range(steps):
+        d = loop[i % len(loop)]
+        if d is not prev:
+            g.input_direction(P1, d)
+            g.input_direction(P2, d)
+            prev = d
+        g.update(C.BASE_MOVE_INTERVAL)
+        if g.is_over():
+            return
 
 
 def test_player_view_never_contains_target_coordinates() -> None:
@@ -168,6 +179,12 @@ def test_player_view_dict_keys_are_whitelisted() -> None:
         "countdown_remaining",
         "enemy_alive",
         "target_indicator",
+        # 目标线索：只有八方向 + 接近度 + 种类，没有坐标
+        "target_proximity",
+        "target_kind",
+        # 只有「进入自己视野」的果子/金苹果才会出现在这里
+        "visible_fruit",
+        "visible_gold",
     }
     assert set(g.view_for(P1).to_dict().keys()) == allowed
 
@@ -207,11 +224,21 @@ def test_darkness_persists_over_time() -> None:
     """不得为了方便开发而临时永久取消黑暗系统。"""
     g = Game(width=30, height=24, seed=2029)
     g.start_match(countdown=0.0)
-    _advance(g, 5.0)
-    if g.is_over():
-        return
+    # 摆进安全区，让两只蛇各绕一个 5x5 小方圈：
+    # P1 在 x∈[10,14], y∈[12,16]；P2 在 x∈[20,24], y∈[12,16]，互不干扰。
+    g.snakes[P1].body = [Cell(10, 12), Cell(9, 12), Cell(8, 12)]
+    g.snakes[P2].body = [Cell(20, 12), Cell(19, 12), Cell(18, 12)]
+    loop = (
+        [Direction.RIGHT] * 4
+        + [Direction.DOWN] * 4
+        + [Direction.LEFT] * 4
+        + [Direction.UP] * 4
+    )
+    _advance_alive(g, 28, loop)  # 28 步 × 0.18s ≈ 5 秒
+    assert not g.is_over(), "这条路线应当保证两只蛇存活满 5 秒，否则测试会空转"
     view = g.view_for(P1)
-    assert len(view.visible_brightness) <= 9
+    # 视野内格子数上限 = 未裁剪的方形视野大小（(2r+1)^2），绝不是全图
+    assert len(view.visible_brightness) <= (2 * C.NORMAL_VIEW_RADIUS + 1) ** 2
     assert view.view_radius == C.NORMAL_VIEW_RADIUS
     assert not view.reveal_active
 
@@ -222,6 +249,10 @@ def test_lantern_only_affects_owner() -> None:
 
     g = Game(width=30, height=24, seed=2030)
     g.start_match(countdown=0.0)
+    # 把两条蛇都挪到地图中央：避免贴边裁剪让「灯笼更大」的比较失真
+    center = Cell(15, 12)
+    for pid in (P1, P2):
+        g.snakes[pid].body = [center.offset(-i, 0) for i in range(3)]
     g.abilities[P1].grant(FruitType.LANTERN, g.clock)
     assert g.view_for(P1).view_radius == C.LANTERN_VIEW_RADIUS
     assert g.view_for(P2).view_radius == C.NORMAL_VIEW_RADIUS
@@ -231,7 +262,7 @@ def test_lantern_only_affects_owner() -> None:
 
 
 def test_reexport_of_config_constants() -> None:
-    assert C.NORMAL_VIEW_RADIUS == 3
-    assert C.LANTERN_VIEW_RADIUS == 4
+    assert C.NORMAL_VIEW_RADIUS == 5
+    assert C.LANTERN_VIEW_RADIUS == 6
     assert C.LANTERN_VIEW_RADIUS > C.NORMAL_VIEW_RADIUS
     assert C.MIN_BRIGHTNESS < C.MAX_BRIGHTNESS

@@ -269,7 +269,7 @@ def test_normal_fruit_count_increments() -> None:
 
 # ================================================================ 速度
 def test_boost_makes_ticks_faster_only_when_held() -> None:
-    """疾跑只改变 Tick 频率，每 Tick 仍只移动一格。"""
+    """疾跑只改变自己的移动频率：每 Tick 仍只走一格，且不把对手带快。"""
     g = Game(width=24, height=18, seed=83)
     g.start_match(countdown=0.0)
     g.abilities[P1].grant(FruitType.SPRINT, g.clock)
@@ -279,10 +279,14 @@ def test_boost_makes_ticks_faster_only_when_held() -> None:
     g.update(C.BASE_MOVE_INTERVAL)
     assert h0.manhattan(g.snakes[P1].head) == 1
 
+    # 开疾跑后只过一个「加速间隔」：疾跑者恰好多走一格
     g.input_sprint(P1, True)
-    h1 = g.snakes[P2].head
+    self_head = g.snakes[P1].head
+    other_head = g.snakes[P2].head
     g.update(C.BOOST_MOVE_INTERVAL)
-    assert h1.manhattan(g.snakes[P2].head) == 1
+    assert self_head.manhattan(g.snakes[P1].head) == 1
+    # 未疾跑的一方计时器独立：这段时间还不到它的一步，不许被带快
+    assert other_head.manhattan(g.snakes[P2].head) == 0
     # 但相同时间内疾跑者能走更多 Tick
     g2 = Game(width=24, height=18, seed=84)
     g2.start_match(countdown=0.0)
