@@ -47,6 +47,25 @@ class SearchResult:
     ocr_excerpt: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class OcrProgress:
+    """Detailed OCR indexing progress for GUI and telemetry."""
+
+    current: int = 0
+    discovered: int = 0
+    cache_hits: int = 0
+    needs_ocr: int = 0
+    ocr_completed: int = 0
+    success: int = 0
+    failed: int = 0
+    current_filename: str = ""
+    current_size_bytes: int = 0
+    last_duration_seconds: float = 0.0
+    average_ocr_seconds: float = 0.0
+    images_per_second: float = 0.0
+    eta_seconds: float | None = None
+
+
 @dataclass(slots=True)
 class SearchStats:
     files_scanned: int = 0

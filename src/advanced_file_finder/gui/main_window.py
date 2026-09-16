@@ -34,7 +34,13 @@ from PySide6.QtWidgets import (
 from advanced_file_finder.core.drives import available_drives
 from advanced_file_finder.core.exporter import export_results
 from advanced_file_finder.core.filters import normalize_extensions
-from advanced_file_finder.core.models import MatchMode, SearchOptions, SearchResult, SearchStats
+from advanced_file_finder.core.models import (
+    MatchMode,
+    OcrProgress,
+    SearchOptions,
+    SearchResult,
+    SearchStats,
+)
 from advanced_file_finder.core.saved_search import SMART_RANGES, SavedSearch, SavedSearchRepository
 from advanced_file_finder.gui.search_worker import OcrIndexWorker, SearchWorker
 from advanced_file_finder.utils.settings import add_history
@@ -379,6 +385,7 @@ class MainWindow(QMainWindow):
         self.ocr_thread.started.connect(self.ocr_worker.run)
         self.ocr_worker.state_changed.connect(self.ocr_index_state)
         self.ocr_worker.progress_changed.connect(self.ocr_index_progress)
+        self.ocr_worker.detailed_progress.connect(self.ocr_index_detailed_progress)
         self.ocr_worker.finished.connect(self.ocr_index_done)
         self.ocr_worker.failed.connect(self.ocr_index_failed)
         self.ocr_worker.finished.connect(self.ocr_thread.quit)
@@ -419,6 +426,19 @@ class MainWindow(QMainWindow):
             self.progress.setValue(current)
         self.status.setText(f"OCR 索引：{current}/{total}，成功 {success}，失败 {failed}")
 
+    def ocr_index_detailed_progress(self, progress: OcrProgress) -> None:
+        if progress.discovered > 0:
+            self.progress.setRange(0, progress.discovered)
+            self.progress.setValue(progress.current)
+        detail = f"OCR 索引：{progress.current}/{progress.discovered}，缓存 {progress.cache_hits}，待识别 {progress.needs_ocr}，成功 {progress.success}，失败 {progress.failed}"
+        if progress.current_filename:
+            size_mb = progress.current_size_bytes / (1024 * 1024)
+            detail += f"｜{progress.current_filename}（{size_mb:.1f} MB）"
+        if progress.ocr_completed and progress.average_ocr_seconds:
+            detail += f"｜平均 {progress.average_ocr_seconds:.1f}s/张，{progress.images_per_second:.2f} 张/秒"
+            if progress.eta_seconds is not None:
+                detail += f"｜预计剩余 {progress.eta_seconds:.0f}s"
+        self.status.setText(detail)
     def cancel_search(self) -> None:
         self.file_search_cancel_event.set()
         self.status.setText("正在取消搜索…")

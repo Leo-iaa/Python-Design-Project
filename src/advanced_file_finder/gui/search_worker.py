@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal, Slot
 
-from advanced_file_finder.core.models import SearchOptions, SearchResult, SearchStats
+from advanced_file_finder.core.models import OcrProgress, SearchOptions, SearchResult, SearchStats
 from advanced_file_finder.core.search_service import search
 
 
@@ -56,6 +56,7 @@ class OcrIndexWorker(QObject):
     """Run conservative one-worker OCR indexing in a QThread."""
 
     progress_changed = Signal(int, int, int, int)
+    detailed_progress = Signal(object)
     state_changed = Signal(str)
     finished = Signal(int, int, int, int, bool)
     failed = Signal(str)
@@ -92,6 +93,7 @@ class OcrIndexWorker(QObject):
                 self._progress,
                 self._state,
                 self.excluded_directories,
+                self._detailed_progress,
             )
             current, total, _progress_success, _progress_failed = self._last_progress
             self.finished.emit(current, total, success, failed, self.cancel.is_set())
@@ -101,6 +103,9 @@ class OcrIndexWorker(QObject):
     def _progress(self, current: int, total: int, success: int, failed: int) -> None:
         self._last_progress = (current, total, success, failed)
         self.progress_changed.emit(current, total, success, failed)
+
+    def _detailed_progress(self, progress: OcrProgress) -> None:
+        self.detailed_progress.emit(progress)
 
     def _state(self, state: str) -> None:
         self.state_changed.emit(state)

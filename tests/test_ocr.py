@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from advanced_file_finder.core.models import OcrProgress
 from advanced_file_finder.core.ocr.cache import OcrCache
 from advanced_file_finder.core.ocr.engine import OcrResult
 from advanced_file_finder.core.ocr.indexer import index_images
@@ -34,3 +35,20 @@ def test_failed_engine_is_recorded(tmp_path: Path) -> None:
             raise RuntimeError("broken")
 
     assert index_images((tmp_path,), cache, Broken()) == (0, 1)
+
+
+def test_detailed_progress_reports_cache_and_eta(tmp_path: Path) -> None:
+    for name in ("a.png", "b.png", "c.png"):
+        (tmp_path / name).write_bytes(name.encode())
+    cache = OcrCache(tmp_path / "ocr.sqlite")
+    progress: list[OcrProgress] = []
+    index_images((tmp_path,), cache, MockEngine(), detailed_progress=progress.append)
+    assert progress[-1].discovered == 3
+    assert progress[-1].needs_ocr == 3
+    assert progress[-1].ocr_completed == 3
+    assert progress[-1].current_filename == "c.png"
+    assert progress[-1].average_ocr_seconds >= 0
+    progress.clear()
+    index_images((tmp_path,), cache, MockEngine(), detailed_progress=progress.append)
+    assert progress[-1].cache_hits == 3
+    assert progress[-1].ocr_completed == 0
