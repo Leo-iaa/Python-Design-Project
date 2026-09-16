@@ -1,5 +1,6 @@
 """Cancellable background-friendly image indexing routine."""
 
+import os
 import threading
 from collections.abc import Callable
 from pathlib import Path
@@ -14,15 +15,28 @@ def index_images(
     engine: OcrEngine,
     cancel: threading.Event | None = None,
     progress: Callable[[int, int, int, int], None] | None = None,
+    state: Callable[[str], None] | None = None,
 ) -> tuple[int, int]:
     """Index changed images and retain successful rows when cancelled."""
-    files = [
-        p
-        for root in roots
-        if root.is_dir()
-        for p in root.rglob("*")
-        if p.is_file() and p.suffix.casefold() in IMAGE_EXTENSIONS
-    ]
+    if state:
+        state("initializing")
+    files: list[Path] = []
+    if state:
+        state("enumerating")
+    for root in roots:
+        if cancel and cancel.is_set():
+            return 0, 0
+        if not root.is_dir():
+            continue
+        for directory, _directories, names in os.walk(root):
+            if cancel and cancel.is_set():
+                return 0, 0
+            for name in names:
+                if cancel and cancel.is_set():
+                    return 0, 0
+                path = Path(directory) / name
+                if path.suffix.casefold() in IMAGE_EXTENSIONS:
+                    files.append(path)
     success = failed = 0
     for current, path in enumerate(files, 1):
         if cancel and cancel.is_set():

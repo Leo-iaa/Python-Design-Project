@@ -50,14 +50,15 @@ class OcrIndexWorker(QObject):
     """Run conservative one-worker OCR indexing in a QThread."""
 
     progress_changed = Signal(int, int, int, int)
-    finished = Signal(int, int)
+    state_changed = Signal(str)
+    finished = Signal(int, int, int, int, bool)
     failed = Signal(str)
 
     def __init__(self, roots: tuple[Path, ...], cancel: threading.Event) -> None:
         super().__init__()
         self.roots = roots
         self.cancel = cancel
-        self._batch: list[SearchResult] = []
+        self._last_progress = (0, 0, 0, 0)
 
     @Slot()
     def run(self) -> None:
@@ -67,12 +68,21 @@ class OcrIndexWorker(QObject):
             from advanced_file_finder.core.ocr.indexer import index_images
             from advanced_file_finder.utils.paths import ocr_database_path
 
+            if self.cancel.is_set():
+                self.finished.emit(0, 0, 0, 0, True)
+                return
             cache = OcrCache(ocr_database_path())
-            self.finished.emit(
-                *index_images(self.roots, cache, RapidOcrEngine(), self.cancel, self._progress)
+            success, failed = index_images(
+                self.roots, cache, RapidOcrEngine(), self.cancel, self._progress, self._state
             )
+            current, total, _progress_success, _progress_failed = self._last_progress
+            self.finished.emit(current, total, success, failed, self.cancel.is_set())
         except Exception as error:
             self.failed.emit(str(error))
 
     def _progress(self, current: int, total: int, success: int, failed: int) -> None:
+        self._last_progress = (current, total, success, failed)
         self.progress_changed.emit(current, total, success, failed)
+
+    def _state(self, state: str) -> None:
+        self.state_changed.emit(state)

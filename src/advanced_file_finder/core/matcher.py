@@ -50,6 +50,8 @@ def match_score(
         return False, 0.0, ""
     if mode is MatchMode.EXACT:
         return True, 100.0, "exact filename"
+    if mode is MatchMode.PARTIAL and _text(Path(name).stem, case_sensitive) == needle:
+        return True, 98.0, "stem exact"
     if candidate.startswith(needle):
         return True, 94.0, "filename prefix"
     if mode is MatchMode.PARTIAL:
