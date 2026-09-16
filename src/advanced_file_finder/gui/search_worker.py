@@ -12,6 +12,8 @@ from advanced_file_finder.core.search_service import search
 class SearchWorker(QObject):
     """Bridge core callbacks to queued Qt signals."""
 
+    _BATCH_SIZE = 100
+
     result_found = Signal(object)
     results_batch = Signal(list)
     progress_changed = Signal(object)
@@ -41,6 +43,10 @@ class SearchWorker(QObject):
 
     def _emit_result(self, result: SearchResult) -> None:
         self.result_found.emit(result)
+        self._batch.append(result)
+        if len(self._batch) >= self._BATCH_SIZE:
+            self.results_batch.emit(self._batch)
+            self._batch = []
 
     def _emit_progress(self, stats: SearchStats) -> None:
         self.progress_changed.emit(stats)
