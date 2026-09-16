@@ -6,6 +6,7 @@ from pathlib import Path
 
 from advanced_file_finder.core.models import SearchResult
 from advanced_file_finder.core.ocr.engine import OcrResult
+from advanced_file_finder.utils.paths import ocr_database_path
 
 IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".webp")
 
@@ -13,8 +14,8 @@ IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".webp")
 class OcrCache:
     """Owns all OCR database operations and invalidates by size/mtime."""
 
-    def __init__(self, path: Path) -> None:
-        self.path = path
+    def __init__(self, path: Path | None = None) -> None:
+        self.path = path or ocr_database_path()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
 

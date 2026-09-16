@@ -60,9 +60,9 @@ class OcrIndexWorker(QObject):
             from advanced_file_finder.core.ocr.cache import OcrCache
             from advanced_file_finder.core.ocr.engine import RapidOcrEngine
             from advanced_file_finder.core.ocr.indexer import index_images
-            from advanced_file_finder.utils.settings import history_path
+            from advanced_file_finder.utils.paths import ocr_database_path
 
-            cache = OcrCache(history_path().with_name("ocr.sqlite"))
+            cache = OcrCache(ocr_database_path())
             self.finished.emit(
                 *index_images(self.roots, cache, RapidOcrEngine(), self.cancel, self._progress)
             )

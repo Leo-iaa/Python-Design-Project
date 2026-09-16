@@ -10,13 +10,13 @@ from advanced_file_finder.core.models import SearchOptions, SearchResult, Search
 from advanced_file_finder.core.ocr.cache import OcrCache
 from advanced_file_finder.core.ranker import rank_results
 from advanced_file_finder.core.scanner import scan_path
-from advanced_file_finder.utils.settings import history_path
+from advanced_file_finder.utils.paths import ocr_database_path
 
 ProgressCallback = Callable[[SearchStats], None]
 
 
 def _ocr_cache() -> OcrCache:
-    return OcrCache(history_path().with_name("ocr.sqlite"))
+    return OcrCache(ocr_database_path())
 
 
 def search(
