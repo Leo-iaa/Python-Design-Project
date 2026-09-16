@@ -263,6 +263,8 @@ class MainWindow(QMainWindow):
 
     def add_result(self, item: SearchResult) -> None:
         self.results.append(item)
+        sorting_enabled = self.table.isSortingEnabled()
+        self.table.setSortingEnabled(False)
         row = self.table.rowCount()
         self.table.insertRow(row)
         source = {
@@ -283,6 +285,7 @@ class MainWindow(QMainWindow):
         )
         for col, value in enumerate(values):
             self.table.setItem(row, col, QTableWidgetItem(value))
+        self.table.setSortingEnabled(sorting_enabled)
 
     def update_progress(self, stats: SearchStats) -> None:
         self.status.setText(
