@@ -40,21 +40,39 @@ def index_images(
                 path = Path(directory) / name
                 if path.suffix.casefold() in IMAGE_EXTENSIONS:
                     files.append(path)
+    metadata = cache.metadata_snapshot()
     success = failed = 0
+    pending: list[tuple[Path, OcrResult, str, str]] = []
+
+    def flush() -> None:
+        if pending:
+            cache.upsert_many(pending)
+            pending.clear()
+
     for current, path in enumerate(files, 1):
         if cancel and cancel.is_set():
+            flush()
             break
-        if cache.is_current(path):
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        cached = metadata.get(str(path))
+        if cached and cached[:2] == (stat.st_size, stat.st_mtime_ns):
             success += 1
             if progress:
                 progress(current, len(files), success, failed)
             continue
         try:
-            cache.upsert(path, engine.recognize(path))
+            result = engine.recognize(path)
+            pending.append((path, result, "indexed", ""))
             success += 1
         except (OSError, ValueError, RuntimeError) as error:
-            cache.upsert(path, OcrResult("", 0.0), "failed", str(error))
+            pending.append((path, OcrResult("", 0.0), "failed", str(error)))
             failed += 1
+        if len(pending) >= 50 or (cancel and cancel.is_set()):
+            flush()
         if progress:
             progress(current, len(files), success, failed)
+    flush()
     return success, failed

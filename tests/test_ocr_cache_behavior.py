@@ -43,3 +43,21 @@ def test_failed_status_is_not_retried_when_unchanged(tmp_path: Path) -> None:
     index_images((tmp_path,), cache, engine)
     index_images((tmp_path,), cache, engine)
     assert engine.calls == 1
+
+
+def test_metadata_snapshot_and_batch_upsert(tmp_path: Path) -> None:
+    first = tmp_path / "first.png"
+    second = tmp_path / "second.jpg"
+    first.write_bytes(b"1")
+    second.write_bytes(b"22")
+    cache = OcrCache(tmp_path / "db.sqlite")
+    written = cache.upsert_many(
+        [
+            (first, OcrResult("one"), "indexed", ""),
+            (second, OcrResult("two"), "failed", "mock"),
+        ]
+    )
+    assert written == 2
+    snapshot = cache.metadata_snapshot()
+    assert snapshot[str(first)][2] == "indexed"
+    assert snapshot[str(second)][2] == "failed"

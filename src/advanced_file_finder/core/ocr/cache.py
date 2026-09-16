@@ -9,6 +9,8 @@ from advanced_file_finder.core.ocr.engine import OcrResult
 from advanced_file_finder.utils.paths import ocr_database_path
 
 IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".webp")
+CacheMetadata = tuple[int, int, str]
+CacheRecord = tuple[Path, OcrResult, str, str]
 
 
 class OcrCache:
@@ -24,6 +26,8 @@ class OcrCache:
 
     def _initialize(self) -> None:
         with self._connect() as db:
+            db.execute("PRAGMA journal_mode=WAL")
+            db.execute("PRAGMA synchronous=NORMAL")
             db.execute(
                 "CREATE TABLE IF NOT EXISTS ocr_files (path TEXT PRIMARY KEY, file_size INTEGER, modified_ns INTEGER, ocr_text TEXT, confidence REAL, engine TEXT, indexed_at TEXT, status TEXT, error TEXT)"
             )
@@ -42,6 +46,14 @@ class OcrCache:
             return None
         return OcrResult(row[2], row[3], row[4])
 
+    def metadata_snapshot(self) -> dict[str, CacheMetadata]:
+        """Read file metadata once for a complete indexing task."""
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT path,file_size,modified_ns,status FROM ocr_files"
+            ).fetchall()
+        return {str(path): (int(size), int(modified_ns), str(status)) for path, size, modified_ns, status in rows}
+
     def is_current(self, path: Path) -> bool:
         """Return true when any recorded status still matches current metadata."""
         try:
@@ -57,13 +69,20 @@ class OcrCache:
     def upsert(
         self, path: Path, result: OcrResult, status: str = "indexed", error: str = ""
     ) -> None:
-        try:
-            stat = path.stat()
-        except OSError:
-            return
-        with self._connect() as db:
-            db.execute(
-                "INSERT OR REPLACE INTO ocr_files VALUES (?,?,?,?,?,?,?,?,?)",
+        self.upsert_many([(path, result, status, error)])
+
+    def upsert_many(self, records: list[CacheRecord]) -> int:
+        """Persist a batch in one transaction and return rows written."""
+        if not records:
+            return 0
+        indexed_at = datetime.now().isoformat()
+        rows = []
+        for path, result, status, error in records:
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            rows.append(
                 (
                     str(path),
                     stat.st_size,
@@ -71,11 +90,16 @@ class OcrCache:
                     result.text,
                     result.confidence,
                     result.engine_name,
-                    datetime.now().isoformat(),
+                    indexed_at,
                     status,
                     error,
-                ),
+                )
             )
+        if not rows:
+            return 0
+        with self._connect() as db:
+            db.executemany("INSERT OR REPLACE INTO ocr_files VALUES (?,?,?,?,?,?,?,?,?)", rows)
+        return len(rows)
 
     def search(self, query: str, roots: tuple[Path, ...]) -> list[SearchResult]:
         rows = []
