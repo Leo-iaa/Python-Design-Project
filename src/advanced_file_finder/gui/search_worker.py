@@ -13,6 +13,7 @@ class SearchWorker(QObject):
     """Bridge core callbacks to queued Qt signals."""
 
     result_found = Signal(object)
+    results_batch = Signal(list)
     progress_changed = Signal(object)
     finished = Signal(list, object)
     failed = Signal(str)
@@ -21,6 +22,7 @@ class SearchWorker(QObject):
         super().__init__()
         self.options = options
         self.cancel = cancel
+        self._batch: list[SearchResult] = []
 
     @Slot()
     def run(self) -> None:
@@ -31,6 +33,8 @@ class SearchWorker(QObject):
                 self._emit_result,
                 self._emit_progress,
             )
+            if self._batch:
+                self.results_batch.emit(self._batch)
             self.finished.emit(results, stats)
         except Exception as error:
             self.failed.emit(str(error))
@@ -53,6 +57,7 @@ class OcrIndexWorker(QObject):
         super().__init__()
         self.roots = roots
         self.cancel = cancel
+        self._batch: list[SearchResult] = []
 
     @Slot()
     def run(self) -> None:

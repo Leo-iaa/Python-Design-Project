@@ -242,7 +242,7 @@ class MainWindow(QMainWindow):
         self.worker = SearchWorker(options, self.cancel)
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run)
-        self.worker.result_found.connect(self.add_result)
+        self.worker.results_batch.connect(self.add_results)
         self.worker.progress_changed.connect(self.update_progress)
         self.worker.finished.connect(self.done)
         self.worker.failed.connect(self.failed)
@@ -251,6 +251,10 @@ class MainWindow(QMainWindow):
         self.thread.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
         self.thread.start()
+
+    def add_results(self, items: list[SearchResult]) -> None:
+        for item in items:
+            self.add_result(item)
 
     def add_result(self, item: SearchResult) -> None:
         self.results.append(item)
