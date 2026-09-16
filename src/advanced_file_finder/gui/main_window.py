@@ -36,7 +36,7 @@ from advanced_file_finder.core.exporter import export_results
 from advanced_file_finder.core.filters import normalize_extensions
 from advanced_file_finder.core.models import MatchMode, SearchOptions, SearchResult, SearchStats
 from advanced_file_finder.core.saved_search import SMART_RANGES, SavedSearch, SavedSearchRepository
-from advanced_file_finder.gui.search_worker import SearchWorker
+from advanced_file_finder.gui.search_worker import OcrIndexWorker, SearchWorker
 from advanced_file_finder.utils.settings import add_history
 
 
@@ -73,6 +73,10 @@ class MainWindow(QMainWindow):
         self.search_button = QPushButton("搜索")
         self.stop_button = QPushButton("停止搜索")
         self.stop_button.setEnabled(False)
+        self.filename_target = QCheckBox("文件名")
+        self.filename_target.setChecked(True)
+        self.ocr_target = QCheckBox("图片文字 OCR")
+        self.index_button = QPushButton("建立 OCR 索引")
         for item in (
             QLabel("关键词"),
             self.query,
@@ -119,11 +123,25 @@ class MainWindow(QMainWindow):
         grid.addWidget(self.hidden_dirs, 1, 5)
         grid.addWidget(QLabel("排除目录"), 2, 0)
         grid.addWidget(self.excluded, 2, 1, 1, 5)
+        grid.addWidget(QLabel("搜索目标"), 3, 0)
+        grid.addWidget(self.filename_target, 3, 1)
+        grid.addWidget(self.ocr_target, 3, 2)
+        grid.addWidget(self.index_button, 3, 3)
         layout.addWidget(filters)
 
-        self.table = QTableWidget(0, 6)
+        self.table = QTableWidget(0, 9)
         self.table.setHorizontalHeaderLabels(
-            ["文件名", "所在目录", "类型", "大小", "修改时间", "完整路径"]
+            [
+                "文件名",
+                "所在目录",
+                "类型",
+                "大小",
+                "修改时间",
+                "完整路径",
+                "相关度",
+                "来源",
+                "OCR 摘要",
+            ]
         )
         self.table.setSortingEnabled(True)
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -144,6 +162,7 @@ class MainWindow(QMainWindow):
         self.search_button.clicked.connect(self.start)
         self.stop_button.clicked.connect(self.cancel_search)
         self.export_button.clicked.connect(self.export)
+        self.index_button.clicked.connect(self.start_ocr_index)
         self.table.cellDoubleClicked.connect(lambda row, _: self.open_file(row))
         self.table.customContextMenuRequested.connect(self.context_menu)
 
@@ -201,6 +220,8 @@ class MainWindow(QMainWindow):
             excluded_directories=tuple(
                 value.strip() for value in self.excluded.text().split(",") if value.strip()
             ),
+            search_filename=self.filename_target.isChecked(),
+            search_ocr=self.ocr_target.isChecked(),
         )
 
     def start(self) -> None:
@@ -311,6 +332,43 @@ class MainWindow(QMainWindow):
         self.query.setText("")
         self.start()
         self.smart_combo.setCurrentIndex(0)
+
+    def start_ocr_index(self) -> None:
+        roots = tuple(
+            Path(value.strip()) for value in self.paths.text().split(";") if value.strip()
+        )
+        if not roots or any(not root.is_dir() for root in roots):
+            QMessageBox.warning(self, "OCR 索引", "请选择存在的目录。")
+            return
+        self.cancel.clear()
+        self.index_button.setEnabled(False)
+        self.progress.setRange(0, 0)
+        self.progress.setVisible(True)
+        self.status.setText("正在建立 OCR 索引…")
+        self.ocr_thread = QThread(self)
+        self.ocr_worker = OcrIndexWorker(roots, self.cancel)
+        self.ocr_worker.moveToThread(self.ocr_thread)
+        self.ocr_thread.started.connect(self.ocr_worker.run)
+        self.ocr_worker.progress_changed.connect(
+            lambda a, b, c, d: self.status.setText(f"OCR 索引：{a}/{b}，成功 {c}，失败 {d}")
+        )
+        self.ocr_worker.finished.connect(self.ocr_index_done)
+        self.ocr_worker.failed.connect(self.ocr_index_failed)
+        self.ocr_worker.finished.connect(self.ocr_thread.quit)
+        self.ocr_worker.failed.connect(self.ocr_thread.quit)
+        self.ocr_thread.finished.connect(self.ocr_worker.deleteLater)
+        self.ocr_thread.finished.connect(self.ocr_thread.deleteLater)
+        self.ocr_thread.start()
+
+    def ocr_index_done(self, success: int, failed: int) -> None:
+        self.index_button.setEnabled(True)
+        self.progress.setVisible(False)
+        self.status.setText(f"OCR 索引完成：成功 {success}，失败 {failed}")
+
+    def ocr_index_failed(self, message: str) -> None:
+        self.index_button.setEnabled(True)
+        self.progress.setVisible(False)
+        QMessageBox.critical(self, "OCR 索引失败", message)
 
     def cancel_search(self) -> None:
         self.cancel.set()
