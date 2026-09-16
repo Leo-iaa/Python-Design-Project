@@ -1,6 +1,7 @@
 """Safe recursive scanner based on :func:`os.walk`."""
 
 import os
+import threading
 import time
 from collections.abc import Callable
 from datetime import datetime
@@ -16,6 +17,7 @@ def scan_path(
     options: SearchOptions,
     stats: SearchStats,
     on_result: Callable[[SearchResult], None] | None = None,
+    cancel: threading.Event | None = None,
 ) -> list[SearchResult]:
     """Recursively scan one directory, retaining filesystem failures in statistics."""
     started, results, matcher = (
@@ -38,6 +40,8 @@ def scan_path(
         return results
     excluded = {name.casefold() for name in options.excluded_directories}
     for directory, dirs, filenames in os.walk(root, onerror=onerror):
+        if cancel and cancel.is_set():
+            break
         dirs[:] = [
             item
             for item in dirs

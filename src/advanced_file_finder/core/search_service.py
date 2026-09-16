@@ -27,7 +27,7 @@ def search(
         if cancel.is_set():
             found = []
         with lock:
-            total.files_scanned += local.files_scanned
+            results.extend(found)`n            total.files_scanned += local.files_scanned
             total.directories_scanned += local.directories_scanned
             total.permission_denied += local.permission_denied
             total.errors += local.errors
