@@ -5,6 +5,7 @@ import threading
 from collections.abc import Callable
 from pathlib import Path
 
+from advanced_file_finder.core.filters import filter_directories
 from advanced_file_finder.core.ocr.cache import IMAGE_EXTENSIONS, OcrCache
 from advanced_file_finder.core.ocr.engine import OcrEngine, OcrResult
 
@@ -16,6 +17,7 @@ def index_images(
     cancel: threading.Event | None = None,
     progress: Callable[[int, int, int, int], None] | None = None,
     state: Callable[[str], None] | None = None,
+    excluded_directories: tuple[str, ...] = (),
 ) -> tuple[int, int]:
     """Index changed images and retain successful rows when cancelled."""
     if state:
@@ -28,7 +30,8 @@ def index_images(
             return 0, 0
         if not root.is_dir():
             continue
-        for directory, _directories, names in os.walk(root):
+        for directory, directories, names in os.walk(root):
+            directories[:] = filter_directories(directories, excluded_directories)
             if cancel and cancel.is_set():
                 return 0, 0
             for name in names:

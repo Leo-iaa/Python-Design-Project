@@ -60,10 +60,16 @@ class OcrIndexWorker(QObject):
     finished = Signal(int, int, int, int, bool)
     failed = Signal(str)
 
-    def __init__(self, roots: tuple[Path, ...], cancel: threading.Event) -> None:
+'    def __init__(
+        self,
+        roots: tuple[Path, ...],
+        cancel: threading.Event,
+        excluded_directories: tuple[str, ...] = (),
+    ) -> None:'
         super().__init__()
         self.roots = roots
         self.cancel = cancel
+        self.excluded_directories = excluded_directories
         self._last_progress = (0, 0, 0, 0)
 
     @Slot()
@@ -79,7 +85,13 @@ class OcrIndexWorker(QObject):
                 return
             cache = OcrCache(ocr_database_path())
             success, failed = index_images(
-                self.roots, cache, RapidOcrEngine(), self.cancel, self._progress, self._state
+                self.roots,
+                cache,
+                RapidOcrEngine(),
+                self.cancel,
+                self._progress,
+                self._state,
+                self.excluded_directories,
             )
             current, total, _progress_success, _progress_failed = self._last_progress
             self.finished.emit(current, total, success, failed, self.cancel.is_set())

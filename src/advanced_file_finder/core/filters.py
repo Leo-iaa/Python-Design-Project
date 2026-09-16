@@ -18,6 +18,40 @@ def is_hidden(path: Path) -> bool:
     return path.name.startswith(".")
 
 
+
+DEFAULT_EXCLUDED_DIRECTORIES = frozenset(
+    {
+        ".git",
+        ".venv",
+        ".local",
+        "node_modules",
+        "__pycache__",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        "build",
+        "dist",
+    }
+)
+
+
+def filter_directories(
+    directories: list[str],
+    excluded_directories: tuple[str, ...] = (),
+    include_hidden_directories: bool = True,
+) -> list[str]:
+    """Return directory names allowed by the shared traversal rules."""
+    excluded = {
+        name.strip().casefold() for name in excluded_directories if name.strip()
+    }
+    if not excluded_directories:
+        excluded = set(DEFAULT_EXCLUDED_DIRECTORIES)
+    return [
+        name
+        for name in directories
+        if name.casefold() not in excluded
+        and (include_hidden_directories or not is_hidden(Path(name)))
+    ]
 def allows(path: Path, size: int, modified: datetime, options: SearchOptions) -> bool:
     """Return whether a candidate whose metadata is available passes all filters."""
     if options.extensions and path.suffix.casefold() not in options.extensions:

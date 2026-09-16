@@ -111,7 +111,10 @@ class MainWindow(QMainWindow):
         self.before_date.setCalendarPopup(True)
         self.hidden_files = QCheckBox("包含隐藏文件")
         self.hidden_dirs = QCheckBox("包含隐藏目录")
-        self.excluded = QLineEdit(".git, .venv, node_modules, __pycache__")
+'        self.excluded = QLineEdit(
+            ".git, .venv, .local, node_modules, __pycache__, "
+            ".pytest_cache, .mypy_cache, .ruff_cache, build, dist"
+        )'
         grid.addWidget(QLabel("扩展名"), 0, 0)
         grid.addWidget(self.extensions, 0, 1)
         grid.addWidget(QLabel("最小大小"), 0, 2)
@@ -188,6 +191,9 @@ class MainWindow(QMainWindow):
             self.paths.setText("; ".join(existing))
             self.scope.setCurrentText("自定义路径")
 
+    def _excluded_directories(self) -> tuple[str, ...]:
+        return tuple(value.strip() for value in self.excluded.text().split(",") if value.strip())
+
     def _options(self) -> SearchOptions:
         paths = tuple(
             Path(value.strip()) for value in self.paths.text().split(";") if value.strip()
@@ -222,9 +228,7 @@ class MainWindow(QMainWindow):
             modified_before=before,
             include_hidden=self.hidden_files.isChecked(),
             include_hidden_directories=self.hidden_dirs.isChecked(),
-            excluded_directories=tuple(
-                value.strip() for value in self.excluded.text().split(",") if value.strip()
-            ),
+            excluded_directories=self._excluded_directories(),
             search_filename=self.filename_target.isChecked(),
             search_ocr=self.ocr_target.isChecked(),
         )
@@ -368,7 +372,9 @@ class MainWindow(QMainWindow):
         self.progress.setVisible(True)
         self.status.setText("正在初始化 OCR…")
         self.ocr_thread = QThread(self)
-        self.ocr_worker = OcrIndexWorker(roots, self.ocr_index_cancel_event)
+        self.ocr_worker = OcrIndexWorker(
+            roots, self.ocr_index_cancel_event, self._excluded_directories()
+        )
         self.ocr_worker.moveToThread(self.ocr_thread)
         self.ocr_thread.started.connect(self.ocr_worker.run)
         self.ocr_worker.state_changed.connect(self.ocr_index_state)

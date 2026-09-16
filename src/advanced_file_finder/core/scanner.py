@@ -7,7 +7,7 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
-from advanced_file_finder.core.filters import allows, is_hidden
+from advanced_file_finder.core.filters import allows, filter_directories
 from advanced_file_finder.core.matcher import match_score
 from advanced_file_finder.core.models import SearchOptions, SearchResult, SearchStats
 
@@ -35,16 +35,12 @@ def scan_path(
         stats.error_messages.append(f"Search path does not exist or is not a directory: {root}")
         stats.elapsed_time += time.perf_counter() - started
         return results
-    excluded = {name.casefold() for name in options.excluded_directories}
     for directory, dirs, filenames in os.walk(root, onerror=onerror):
         if cancel and cancel.is_set():
             break
-        dirs[:] = [
-            item
-            for item in dirs
-            if item.casefold() not in excluded
-            and (options.include_hidden_directories or not is_hidden(Path(item)))
-        ]
+        dirs[:] = filter_directories(
+            dirs, options.excluded_directories, options.include_hidden_directories
+        )
         stats.directories_scanned += 1
         parent = Path(directory)
         for filename in filenames:
