@@ -1,4 +1,5 @@
 """Typed values exchanged by the core search services."""
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
