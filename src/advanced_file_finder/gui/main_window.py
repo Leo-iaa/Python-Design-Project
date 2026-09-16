@@ -1,20 +1,26 @@
-"""Responsive, native-looking main window."""
+"""Feature-complete, responsive Qt desktop interface."""
 
 import os
 import subprocess
 import sys
 import threading
+from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QThread
+from PySide6.QtCore import QDate, Qt, QThread
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
+    QDateEdit,
     QFileDialog,
+    QGridLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -24,143 +30,287 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from advanced_file_finder.core.drives import available_drives
 from advanced_file_finder.core.exporter import export_results
-from advanced_file_finder.core.models import MatchMode, SearchOptions
+from advanced_file_finder.core.filters import normalize_extensions
+from advanced_file_finder.core.models import MatchMode, SearchOptions, SearchResult, SearchStats
 from advanced_file_finder.gui.search_worker import SearchWorker
+from advanced_file_finder.utils.settings import add_history
 
 
 class MainWindow(QMainWindow):
+    """Present all search modes without blocking Qt's main thread."""
+
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Advanced File Finder")
-        self.resize(1050, 650)
+        self.resize(1180, 720)
         self.cancel = threading.Event()
-        self.results = []
+        self.results: list[SearchResult] = []
+        self._build_ui()
+
+    def _build_ui(self) -> None:
         root = QWidget()
         layout = QVBoxLayout(root)
-        top = QHBoxLayout()
+        search_row = QHBoxLayout()
         self.query = QLineEdit()
-        self.query.setPlaceholderText("搜索关键词")
-        self.extensions = QLineEdit()
-        self.extensions.setPlaceholderText("扩展名，如 pdf,docx")
+        self.query.setPlaceholderText("文件名关键词（留空查找所有文件）")
         self.mode = QComboBox()
-        self.mode.addItems([x.value for x in MatchMode])
-        self.path = QLineEdit(str(Path.cwd()))
-        choose = QPushButton("选择目录")
+        self.mode.addItems([item.value for item in MatchMode])
+        self.scope = QComboBox()
+        self.scope.addItems(["当前目录", "自定义路径", "所有可用磁盘"])
+        self.paths = QLineEdit(str(Path.cwd()))
+        browse = QPushButton("添加目录")
         self.search_button = QPushButton("搜索")
-        export_button = QPushButton("导出结果")
-        self.stop = QPushButton("停止搜索")
-        self.stop.setEnabled(False)
-        for w in (
+        self.stop_button = QPushButton("停止搜索")
+        self.stop_button.setEnabled(False)
+        for item in (
             QLabel("关键词"),
             self.query,
-            QLabel("模式"),
+            QLabel("匹配"),
             self.mode,
-            QLabel("路径"),
-            self.path,
-            choose,
+            QLabel("范围"),
+            self.scope,
+            self.paths,
+            browse,
             self.search_button,
-            self.stop,
+            self.stop_button,
         ):
-            top.addWidget(w)
-        layout.addLayout(top)
+            search_row.addWidget(item)
+        layout.addLayout(search_row)
+
+        filters = QGroupBox("高级过滤")
+        grid = QGridLayout(filters)
+        self.extensions = QLineEdit()
+        self.extensions.setPlaceholderText("pdf, docx, .py")
+        self.minimum = QLineEdit()
+        self.minimum.setPlaceholderText("字节")
+        self.maximum = QLineEdit()
+        self.maximum.setPlaceholderText("字节")
+        self.after_enabled = QCheckBox("修改时间起点")
+        self.before_enabled = QCheckBox("修改时间终点")
+        self.after_date = QDateEdit(QDate.currentDate().addYears(-1))
+        self.before_date = QDateEdit(QDate.currentDate())
+        self.after_date.setCalendarPopup(True)
+        self.before_date.setCalendarPopup(True)
+        self.hidden_files = QCheckBox("包含隐藏文件")
+        self.hidden_dirs = QCheckBox("包含隐藏目录")
+        self.excluded = QLineEdit(".git, .venv, node_modules, __pycache__")
+        grid.addWidget(QLabel("扩展名"), 0, 0)
+        grid.addWidget(self.extensions, 0, 1)
+        grid.addWidget(QLabel("最小大小"), 0, 2)
+        grid.addWidget(self.minimum, 0, 3)
+        grid.addWidget(QLabel("最大大小"), 0, 4)
+        grid.addWidget(self.maximum, 0, 5)
+        grid.addWidget(self.after_enabled, 1, 0)
+        grid.addWidget(self.after_date, 1, 1)
+        grid.addWidget(self.before_enabled, 1, 2)
+        grid.addWidget(self.before_date, 1, 3)
+        grid.addWidget(self.hidden_files, 1, 4)
+        grid.addWidget(self.hidden_dirs, 1, 5)
+        grid.addWidget(QLabel("排除目录"), 2, 0)
+        grid.addWidget(self.excluded, 2, 1, 1, 5)
+        layout.addWidget(filters)
+
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(
             ["文件名", "所在目录", "类型", "大小", "修改时间", "完整路径"]
         )
         self.table.setSortingEnabled(True)
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         layout.addWidget(self.table)
         bottom = QHBoxLayout()
         self.status = QLabel("就绪")
         self.progress = QProgressBar()
         self.progress.setRange(0, 0)
         self.progress.setVisible(False)
+        self.export_button = QPushButton("导出结果")
         bottom.addWidget(self.status)
         bottom.addWidget(self.progress)
+        bottom.addWidget(self.export_button)
         layout.addLayout(bottom)
         self.setCentralWidget(root)
-        choose.clicked.connect(self.choose)
+        browse.clicked.connect(self.add_directory)
+        self.scope.currentIndexChanged.connect(self._scope_changed)
         self.search_button.clicked.connect(self.start)
-        self.stop.clicked.connect(self.cancel_search)
-        export_button.clicked.connect(self.export)
-        self.table.cellDoubleClicked.connect(self.open_result)
+        self.stop_button.clicked.connect(self.cancel_search)
+        self.export_button.clicked.connect(self.export)
+        self.table.cellDoubleClicked.connect(lambda row, _: self.open_file(row))
+        self.table.customContextMenuRequested.connect(self.context_menu)
 
-    def choose(self) -> None:
-        directory = QFileDialog.getExistingDirectory(self, "选择搜索目录", self.path.text())
+    def _scope_changed(self) -> None:
+        custom = self.scope.currentText() == "自定义路径"
+        self.paths.setEnabled(custom)
+        if self.scope.currentText() == "当前目录":
+            self.paths.setText(str(Path.cwd()))
+        if self.scope.currentText() == "所有可用磁盘":
+            self.paths.setText("; ".join(map(str, available_drives())))
+
+    def add_directory(self) -> None:
+        directory = QFileDialog.getExistingDirectory(self, "添加搜索目录", str(Path.cwd()))
         if directory:
-            self.path.setText(directory)
+            existing = [value.strip() for value in self.paths.text().split(";") if value.strip()]
+            if directory not in existing:
+                existing.append(directory)
+            self.paths.setText("; ".join(existing))
+            self.scope.setCurrentText("自定义路径")
+
+    def _options(self) -> SearchOptions:
+        paths = tuple(
+            Path(value.strip()) for value in self.paths.text().split(";") if value.strip()
+        )
+        if not paths or any(not path.is_dir() for path in paths):
+            raise ValueError("请选择一个或多个存在的目录。")
+
+        def number(widget: QLineEdit) -> int | None:
+            return int(widget.text()) if widget.text().strip() else None
+
+        minimum, maximum = number(self.minimum), number(self.maximum)
+        if minimum is not None and maximum is not None and minimum > maximum:
+            raise ValueError("最小大小不能大于最大大小。")
+        after = (
+            datetime.combine(self.after_date.date().toPython(), datetime.min.time())
+            if self.after_enabled.isChecked()
+            else None
+        )
+        before = (
+            datetime.combine(self.before_date.date().toPython(), datetime.max.time())
+            if self.before_enabled.isChecked()
+            else None
+        )
+        return SearchOptions(
+            self.query.text(),
+            paths,
+            MatchMode(self.mode.currentText()),
+            extensions=normalize_extensions(self.extensions.text()),
+            min_size=minimum,
+            max_size=maximum,
+            modified_after=after,
+            modified_before=before,
+            include_hidden=self.hidden_files.isChecked(),
+            include_hidden_directories=self.hidden_dirs.isChecked(),
+            excluded_directories=tuple(
+                value.strip() for value in self.excluded.text().split(",") if value.strip()
+            ),
+        )
 
     def start(self) -> None:
-        root = Path(self.path.text())
-        if not root.is_dir():
-            QMessageBox.warning(self, "无效路径", "请选择存在的目录。")
+        try:
+            options = self._options()
+        except (ValueError, OSError) as error:
+            QMessageBox.warning(self, "搜索条件无效", str(error))
             return
+        self.results.clear()
         self.table.setRowCount(0)
         self.cancel.clear()
         self.progress.setVisible(True)
         self.search_button.setEnabled(False)
-        self.stop.setEnabled(True)
+        self.stop_button.setEnabled(True)
         self.status.setText("正在扫描…")
-        options = SearchOptions(self.query.text(), (root,), MatchMode(self.mode.currentText()))
+        add_history(options.query, options.match_mode.value, options.search_paths)
         self.thread = QThread(self)
         self.worker = SearchWorker(options, self.cancel)
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run)
+        self.worker.result_found.connect(self.add_result)
+        self.worker.progress_changed.connect(self.update_progress)
         self.worker.finished.connect(self.done)
-        self.worker.failed.connect(lambda x: QMessageBox.critical(self, "搜索失败", x))
+        self.worker.failed.connect(self.failed)
         self.worker.finished.connect(self.thread.quit)
+        self.worker.failed.connect(self.thread.quit)
         self.thread.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
         self.thread.start()
 
-    def done(self, results: list, stats: object) -> None:
-        self.results = results
-        self.table.setRowCount(len(results))
-        for row, item in enumerate(results):
-            values = [
+    def add_result(self, item: SearchResult) -> None:
+        self.results.append(item)
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        for col, value in enumerate(
+            (
                 item.name,
                 str(item.parent_path),
                 item.extension,
                 str(item.size),
                 item.modified_time.strftime("%Y-%m-%d %H:%M"),
                 str(item.full_path),
-            ]
-            for col, value in enumerate(values):
-                self.table.setItem(row, col, QTableWidgetItem(value))
-        self.progress.setVisible(False)
-        self.search_button.setEnabled(True)
-        self.stop.setEnabled(False)
-        state = "已取消" if self.cancel.is_set() else "完成"
+            )
+        ):
+            self.table.setItem(row, col, QTableWidgetItem(value))
+
+    def update_progress(self, stats: SearchStats) -> None:
         self.status.setText(
-            f"{state}：扫描 {stats.files_scanned} 文件，找到 {stats.matches}，{stats.elapsed_time:.2f} 秒"
+            f"扫描 {stats.files_scanned} 文件 / {stats.directories_scanned} 目录；命中 {stats.matches}"
         )
 
-    def export(self) -> None:
-        if not self.results:
-            QMessageBox.information(self, "导出", "没有可导出的结果。")
-            return
-        path, selected = QFileDialog.getSaveFileName(
-            self, "导出结果", "results.csv", "CSV (*.csv);;JSON (*.json);;Text (*.txt)"
+    def done(self, results: list[SearchResult], stats: SearchStats) -> None:
+        self.results = results
+        self.progress.setVisible(False)
+        self.search_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+        state = "已取消" if self.cancel.is_set() else "完成"
+        self.status.setText(
+            f"{state}：扫描 {stats.files_scanned} 文件，命中 {stats.matches}，耗时 {stats.elapsed_time:.2f} 秒"
         )
-        if path:
-            suffix = Path(path).suffix.lstrip(".") or "csv"
-            try:
-                export_results(self.results, Path(path), suffix)
-            except (OSError, ValueError) as error:
-                QMessageBox.critical(self, "导出失败", str(error))
+
+    def failed(self, message: str) -> None:
+        self.progress.setVisible(False)
+        self.search_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+        QMessageBox.critical(self, "搜索失败", message)
 
     def cancel_search(self) -> None:
         self.cancel.set()
         self.status.setText("正在取消…")
 
-    def open_result(self, row: int, _: int) -> None:
-        path = self.results[row].full_path
+    def _item_path(self, row: int) -> Path:
+        return Path(self.table.item(row, 5).text())
+
+    def open_file(self, row: int) -> None:
+        self._open(self._item_path(row))
+
+    def _open(self, path: Path) -> None:
         if sys.platform.startswith("win"):
             os.startfile(path)  # type: ignore[attr-defined]
         elif sys.platform == "darwin":
             subprocess.run(["open", str(path)], check=False)
         else:
             subprocess.run(["xdg-open", str(path)], check=False)
+
+    def context_menu(self, position: object) -> None:
+        row = self.table.currentRow()
+        if row < 0:
+            return
+        path = self._item_path(row)
+        menu = QMenu(self)
+        open_action = menu.addAction("打开文件")
+        folder_action = menu.addAction("打开所在文件夹")
+        copy_path = menu.addAction("复制完整路径")
+        copy_name = menu.addAction("复制文件名")
+        chosen = menu.exec(self.table.viewport().mapToGlobal(position))
+        if chosen == open_action:
+            self._open(path)
+        elif chosen == folder_action:
+            self._open(path.parent)
+        elif chosen == copy_path:
+            QApplication.clipboard().setText(str(path))
+        elif chosen == copy_name:
+            QApplication.clipboard().setText(path.name)
+
+    def export(self) -> None:
+        if not self.results:
+            QMessageBox.information(self, "导出", "没有可导出的结果。")
+            return
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "导出结果", "results.csv", "CSV (*.csv);;JSON (*.json);;Text (*.txt)"
+        )
+        if filename:
+            try:
+                export_results(
+                    self.results, Path(filename), Path(filename).suffix.lstrip(".") or "csv"
+                )
+            except (OSError, ValueError) as error:
+                QMessageBox.critical(self, "导出失败", str(error))
 
 
 def run() -> None:
