@@ -371,6 +371,22 @@ class MainWindow(QMainWindow):
         if not roots or any(not root.is_dir() for root in roots):
             QMessageBox.warning(self, "OCR 索引", "请选择存在的目录。")
             return
+        from advanced_file_finder.core.ocr.indexer import estimate_image_count
+
+        excluded = self._excluded_directories()
+        candidate_count = estimate_image_count(roots, excluded)
+        if candidate_count >= 100:
+            answer = QMessageBox.question(
+                self,
+                "大型 OCR 索引",
+                f"检测到约 {candidate_count} 张图片，将建立或更新 OCR 索引。\n"
+                "已缓存且未变化的图片会直接跳过。是否继续？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                self.status.setText("已取消 OCR 索引")
+                return
         self.ocr_index_cancel_event.clear()
         self.index_button.setEnabled(False)
         self.ocr_stop_button.setEnabled(True)
@@ -379,7 +395,7 @@ class MainWindow(QMainWindow):
         self.status.setText("正在初始化 OCR…")
         self.ocr_thread = QThread(self)
         self.ocr_worker = OcrIndexWorker(
-            roots, self.ocr_index_cancel_event, self._excluded_directories()
+            roots, self.ocr_index_cancel_event, excluded
         )
         self.ocr_worker.moveToThread(self.ocr_thread)
         self.ocr_thread.started.connect(self.ocr_worker.run)

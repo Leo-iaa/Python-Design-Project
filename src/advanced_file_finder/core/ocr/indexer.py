@@ -13,6 +13,21 @@ from advanced_file_finder.core.ocr.cache import IMAGE_EXTENSIONS, OcrCache
 from advanced_file_finder.core.ocr.engine import OcrEngine, OcrResult
 
 
+def estimate_image_count(
+    roots: tuple[Path, ...], excluded_directories: tuple[str, ...] = ()
+) -> int:
+    """Count candidate images without opening them, for a preflight prompt."""
+    count = 0
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for _directory, directories, names in os.walk(root):
+            directories[:] = filter_directories(directories, excluded_directories)
+            count += sum(
+                Path(name).suffix.casefold() in IMAGE_EXTENSIONS for name in names
+            )
+    return count
+
 def index_images(
     roots: tuple[Path, ...],
     cache: OcrCache,
