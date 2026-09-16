@@ -11,6 +11,7 @@ class MatchMode(StrEnum):
     PARTIAL = "partial"
     GLOB = "glob"
     REGEX = "regex"
+    FUZZY = "fuzzy"
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +28,9 @@ class SearchOptions:
     include_hidden: bool = False
     include_hidden_directories: bool = False
     excluded_directories: tuple[str, ...] = ()
+    fuzzy_threshold: int = 75
+    search_filename: bool = True
+    search_ocr: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +41,10 @@ class SearchResult:
     extension: str
     size: int
     modified_time: datetime
+    match_score: float = 0.0
+    match_source: str = "filename"
+    match_reason: str = ""
+    ocr_excerpt: str = ""
 
 
 @dataclass(slots=True)

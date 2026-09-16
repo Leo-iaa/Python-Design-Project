@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from advanced_file_finder.core.filters import allows, is_hidden
-from advanced_file_finder.core.matcher import build_matcher
+from advanced_file_finder.core.matcher import match_score
 from advanced_file_finder.core.models import SearchOptions, SearchResult, SearchStats
 
 
@@ -19,12 +19,9 @@ def scan_path(
     on_result: Callable[[SearchResult], None] | None = None,
     cancel: threading.Event | None = None,
 ) -> list[SearchResult]:
-    """Recursively scan one directory, retaining filesystem failures in statistics."""
-    started, results, matcher = (
-        time.perf_counter(),
-        [],
-        build_matcher(options.query, options.match_mode, options.case_sensitive),
-    )
+    """Recursively scan one directory while retaining filesystem failures."""
+    started = time.perf_counter()
+    results: list[SearchResult] = []
 
     def onerror(error: OSError) -> None:
         if isinstance(error, PermissionError):
@@ -51,8 +48,17 @@ def scan_path(
         stats.directories_scanned += 1
         parent = Path(directory)
         for filename in filenames:
+            if cancel and cancel.is_set():
+                break
             stats.files_scanned += 1
-            if not matcher(filename):
+            matched, score, reason = match_score(
+                filename,
+                options.query,
+                options.match_mode,
+                options.case_sensitive,
+                options.fuzzy_threshold,
+            )
+            if not matched:
                 continue
             path = parent / filename
             try:
@@ -67,7 +73,17 @@ def scan_path(
             modified = datetime.fromtimestamp(metadata.st_mtime)
             if not allows(path, metadata.st_size, modified, options):
                 continue
-            result = SearchResult(filename, path, parent, path.suffix, metadata.st_size, modified)
+            result = SearchResult(
+                filename,
+                path,
+                parent,
+                path.suffix,
+                metadata.st_size,
+                modified,
+                score,
+                "filename",
+                reason,
+            )
             results.append(result)
             stats.matches += 1
             if on_result:
