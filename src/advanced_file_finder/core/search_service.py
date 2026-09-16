@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from advanced_file_finder.core.models import SearchOptions, SearchResult, SearchStats
+from advanced_file_finder.core.ranker import rank_results
 from advanced_file_finder.core.scanner import scan_path
 
 ProgressCallback = Callable[[SearchStats], None]
@@ -59,4 +60,4 @@ def search(
         for future in [executor.submit(task, path) for path in options.search_paths]:
             future.result()
     total.elapsed_time = time.perf_counter() - started
-    return results, total
+    return rank_results(results), total
