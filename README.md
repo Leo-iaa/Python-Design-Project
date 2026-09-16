@@ -1,61 +1,108 @@
-# Advanced File Finder
+# Advanced File Finder（高级文件查找器）
 
-Advanced File Finder is a Windows-first, read-only desktop search tool built with Python 3.12, PySide6 and UV. Filesystem work runs in worker threads so the GUI stays responsive.
+Advanced File Finder 是一款以 Windows 为优先平台的只读桌面文件搜索工具，使用 Python 3.12、PySide6 和 UV 构建。文件扫描、搜索与 OCR 索引均在后台线程中执行，保持图形界面响应流畅。
 
-## Search modes
+## 功能概览
 
-- `exact`: complete filename match
-- `partial`: case-insensitive substring match
-- `fuzzy`: RapidFuzz WRatio over the filename stem, with a configurable 0-100 threshold (default 75)
-- `glob`: patterns such as `*.pdf`
-- `regex`: Python regular expressions with friendly invalid-pattern errors
+- 精确匹配、部分匹配、模糊匹配、Glob 通配符和正则表达式匹配
+- 按文件名相关度排序，并以修改时间、路径深度作为稳定的次级排序依据
+- 支持扩展名、文件大小、修改时间、隐藏文件/目录和排除目录过滤
+- 支持当前目录、自定义多个目录和自动检测的所有 Windows 磁盘
+- 支持保存搜索条件和智能搜索
+- 支持本地 OCR 图片文字搜索、缓存和增量更新
+- 支持搜索结果导出为 CSV、JSON 或文本文件
+- 全程只读，不删除或修改被搜索的文件
 
-Results are ranked by filename relevance first, with recency and path depth used only as stable tie-breakers. Fuzzy scores, OCR scores and combined-source bonuses are normalized to 0-100.
+## 搜索模式
 
-## Filters and scopes
+图形界面的“匹配”选项对应以下模式：
 
-The GUI supports current directory, multiple custom directories, and all detected Windows drives. Filters include extension, minimum/maximum size, modification date range, hidden files/directories, and excluded directory names.
+- `exact`：完整文件名匹配
+- `partial`：不区分大小写的部分匹配
+- `fuzzy`：使用 RapidFuzz WRatio 对文件名（不含扩展名）进行模糊匹配，可设置 0–100 的阈值，默认值为 75
+- `glob`：支持 `*.pdf` 等通配符模式
+- `regex`：使用 Python 正则表达式；无效表达式会显示友好的错误提示
 
-## Saved and Smart Search
+文件名、模糊匹配和 OCR 的分数都会归一化到 0–100。文件名与 OCR 同时命中时，会获得合并来源加分。
 
-Use **保存当前** to persist the complete query configuration in the user application-data directory. Saved searches can be loaded from the toolbar. Built-in Smart Searches include 今天, 最近 24 小时, 最近 7 天, and 最近 30 天; their time windows are resolved relative to the time of execution rather than stored as fixed dates.
+## 搜索范围与过滤条件
 
-## OCR image search
+搜索范围可以选择：
 
-OCR is local-only and uses RapidOCR with Pillow-compatible image formats: PNG, JPG/JPEG, BMP and WEBP. Click **建立 OCR 索引** before searching image text, then enable **图片文字 OCR** (alone or together with 文件名). OCR text is cached in SQLite at the project-local path `<PROJECT_ROOT>/.local/ocr.sqlite` (legacy `%APPDATA%\\AdvancedFileFinder\\ocr.sqlite` databases are copied safely once), keyed by path, file size and modification time. Changed images are reprocessed; cached images are reused. Indexing is cancellable and reports real `processed / total`, success and failure counts. OCR matches show a short excerpt and participate in the same ranking and export pipeline. No image or OCR content is uploaded.
+- 当前目录
+- 自定义路径（支持使用分号分隔多个目录）
+- 所有可用磁盘
 
-The first index can take time because the OCR model runs locally. Subsequent searches use the cache and are much faster.
+高级过滤条件包括扩展名、最小/最大字节数、修改时间起止日期、是否包含隐藏文件、是否包含隐藏目录，以及排除目录名称（默认排除 `.git`、`.venv`、`node_modules` 和 `__pycache__`）。
 
-## Install and run
+## 保存搜索与智能搜索
 
-UV is required; do not activate a virtual environment manually:
+使用“保存当前”可以保存完整的搜索配置，并从工具栏重新加载。内置智能搜索包括“今天”“最近 24 小时”“最近 7 天”和“最近 30 天”。这些时间范围会在执行搜索时相对当前时间计算，不会保存为固定日期。
+
+## OCR 图片文字搜索
+
+OCR 使用本地 RapidOCR，不上传图片或识别内容，支持以下图片格式：
+
+- PNG
+- JPG/JPEG
+- BMP
+- WEBP
+
+使用步骤：
+
+1. 选择要建立索引的目录。
+2. 点击“建立 OCR 索引”。
+3. 等待索引完成，或在需要时点击旁边的“停止 OCR 索引”。
+4. 勾选“图片文字 OCR”，可单独搜索 OCR 文字，也可与“文件名”同时搜索。
+
+OCR 索引特性：
+
+- 索引在后台线程中运行，界面不会冻结。
+- “停止 OCR 索引”使用独立的线程安全取消事件；它不会停止普通文件搜索。普通搜索仍由“停止搜索”单独控制。
+- 取消时不会强制终止当前图片的模型推理。当前图片安全完成后，不再调度下一张图片。
+- 目录枚举和图片处理阶段都会检查取消状态。
+- 已成功识别的数据会保留；取消不会回滚或清空数据库。状态栏会显示已处理数量、成功数和失败数。
+- 再次建立或更新索引时，文件大小和修改时间未变化的图片直接命中缓存，仅处理新增、变化或尚未完成的图片。
+
+OCR 数据库位于项目本地路径：
+
+```text
+<项目根目录>/.local/ocr.sqlite
+```
+
+程序会在首次使用时安全迁移旧位置 `%APPDATA%\AdvancedFileFinder\ocr.sqlite` 中的数据库（如果存在）。缓存按文件路径、大小和修改时间校验。OCR 搜索结果会显示文字摘要，并参与统一排序和导出流程。
+
+## 安装与运行
+
+需要先安装 UV。无需手动激活虚拟环境：
 
 ```powershell
 uv sync
 uv run python -m advanced_file_finder
 ```
 
-CLI examples:
+也可以使用命令行搜索：
 
 ```powershell
 uv run advanced-file-finder report D:\Documents --ext pdf,docx
-uv run advanced-file-finder "^invoice.*\\.pdf$" D:\Documents --regex
+uv run advanced-file-finder "^invoice.*\.pdf$" D:\Documents --regex
 ```
 
-## Development and verification
+## 开发与验证
 
 ```powershell
 uv run pytest
 uv run ruff check .
+git diff --check
 ```
 
-The test suite uses temporary directories and mock OCR engines; it does not scan a real system drive or use private user images.
+测试使用临时目录和 Mock OCR 引擎，不会扫描真实系统磁盘，也不会使用用户的私有图片。OCR 取消测试覆盖取消前、目录枚举中、索引处理中、重复取消以及取消后再次运行等场景。
 
-## Project structure
+## 项目结构
 
-- `src/advanced_file_finder/core`: models, matcher, filters, scanner, concurrent service, ranker, exporters, saved searches and OCR engine/cache/indexer
-- `src/advanced_file_finder/gui`: PySide6 main window and background workers
-- `src/advanced_file_finder/utils`: user-data settings/history locations
-- `tests`: filename, filter, ranking, saved-search, export, OCR-cache and regression tests
+- `src/advanced_file_finder/core`：数据模型、匹配器、过滤器、扫描器、并发搜索服务、排序器、导出器、保存搜索，以及 OCR 引擎/缓存/索引器
+- `src/advanced_file_finder/gui`：PySide6 主窗口和后台 worker
+- `src/advanced_file_finder/utils`：本地配置、搜索历史和运行数据路径
+- `tests`：匹配、过滤、排序、保存搜索、导出、扫描、OCR 缓存、取消和回归测试
 
-The application never deletes or modifies searched files. OCR databases and search history are kept outside the repository; `.gitignore` excludes runtime data and build artifacts.
+应用不会删除或修改被搜索的文件。OCR 数据库、搜索历史、日志和报告均保存在项目本地运行数据目录中；`.gitignore` 会排除这些运行数据及构建产物。
