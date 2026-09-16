@@ -265,16 +265,23 @@ class MainWindow(QMainWindow):
         self.results.append(item)
         row = self.table.rowCount()
         self.table.insertRow(row)
-        for col, value in enumerate(
-            (
-                item.name,
-                str(item.parent_path),
-                item.extension,
-                str(item.size),
-                item.modified_time.strftime("%Y-%m-%d %H:%M"),
-                str(item.full_path),
-            )
-        ):
+        source = {
+            "filename": "文件名",
+            "ocr": "图片文字 OCR",
+            "filename+ocr": "文件名 + OCR",
+        }.get(item.match_source, item.match_source)
+        values = (
+            item.name,
+            str(item.parent_path),
+            item.extension,
+            str(item.size),
+            item.modified_time.strftime("%Y-%m-%d %H:%M"),
+            str(item.full_path),
+            f"{item.match_score:.1f}",
+            source,
+            item.ocr_excerpt,
+        )
+        for col, value in enumerate(values):
             self.table.setItem(row, col, QTableWidgetItem(value))
 
     def update_progress(self, stats: SearchStats) -> None:
