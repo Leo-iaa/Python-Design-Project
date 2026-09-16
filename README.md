@@ -22,7 +22,7 @@ Use **保存当前** to persist the complete query configuration in the user app
 
 ## OCR image search
 
-OCR is local-only and uses RapidOCR with Pillow-compatible image formats: PNG, JPG/JPEG, BMP and WEBP. Click **建立 OCR 索引** before searching image text, then enable **图片文字 OCR** (alone or together with 文件名). OCR text is cached in SQLite at the platform user-data location (`%APPDATA%\\AdvancedFileFinder\\ocr.sqlite` on Windows), keyed by path, file size and modification time. Changed images are reprocessed; cached images are reused. Indexing is cancellable and reports real `processed / total`, success and failure counts. OCR matches show a short excerpt and participate in the same ranking and export pipeline. No image or OCR content is uploaded.
+OCR is local-only and uses RapidOCR with Pillow-compatible image formats: PNG, JPG/JPEG, BMP and WEBP. Click **建立 OCR 索引** before searching image text, then enable **图片文字 OCR** (alone or together with 文件名). OCR text is cached in SQLite at the project-local path `<PROJECT_ROOT>/.local/ocr.sqlite` (legacy `%APPDATA%\\AdvancedFileFinder\\ocr.sqlite` databases are copied safely once), keyed by path, file size and modification time. Changed images are reprocessed; cached images are reused. Indexing is cancellable and reports real `processed / total`, success and failure counts. OCR matches show a short excerpt and participate in the same ranking and export pipeline. No image or OCR content is uploaded.
 
 The first index can take time because the OCR model runs locally. Subsequent searches use the cache and are much faster.
 
