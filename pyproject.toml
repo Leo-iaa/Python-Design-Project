@@ -5,7 +5,9 @@ description = "A responsive desktop file search tool with advanced filtering"
 readme = "README.md"
 authors = [{ name = "wt-x", email = "2773050934@qq.com" }]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pyside6>=6.11.2",
+]
 
 [project.scripts]
 advanced-file-finder = "advanced_file_finder.__main__:main"
@@ -18,7 +20,7 @@ target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+select = ["E", "F", "I", "UP", "B"]`nextend-ignore = ["E501"]
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
